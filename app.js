@@ -1,6 +1,9 @@
 const app = document.querySelector('#app')
 const topMeta = document.querySelector('#top-meta')
 const imagePattern = /!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g
+const encryptedFormat = 'wisburg-encrypted-v1'
+const sessionKey = 'wisburg-access-v1'
+const sessionLifetime = 30 * 60 * 1000
 
 function element(tag, className, text) {
   const node = document.createElement(tag)
@@ -182,13 +185,138 @@ function render(data) {
   app.append(narratives, events, deepDive)
 }
 
-fetch(`./data/latest.json?v=${Date.now()}`, { cache: 'no-store' })
-  .then(response => {
-    if (!response.ok) throw new Error(`最新简报尚未发布（${response.status}）`)
-    return response.json()
-  })
-  .then(render)
-  .catch(error => {
-    app.replaceChildren(element('div', 'state', error instanceof Error ? error.message : '简报加载失败'))
-  })
+function bytesFromBase64(value) {
+  const binary = atob(value)
+  return Uint8Array.from(binary, character => character.charCodeAt(0))
+}
 
+function validateEnvelope(envelope) {
+  if (envelope?.format !== encryptedFormat) throw new Error('简报未加密，已拒绝加载')
+  if (envelope.kdf?.name !== 'PBKDF2' || envelope.kdf?.hash !== 'SHA-256') throw new Error('不支持的密钥格式')
+  if (envelope.cipher?.name !== 'AES-GCM') throw new Error('不支持的加密格式')
+  if (!envelope.kdf?.salt || !envelope.cipher?.iv || !envelope.cipher?.ciphertext) throw new Error('加密简报不完整')
+}
+
+async function decryptEnvelope(envelope, answer) {
+  validateEnvelope(envelope)
+  const encoder = new TextEncoder()
+  const material = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(answer),
+    'PBKDF2',
+    false,
+    ['deriveKey'],
+  )
+  const key = await crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: bytesFromBase64(envelope.kdf.salt),
+      iterations: Number(envelope.kdf.iterations),
+      hash: 'SHA-256',
+    },
+    material,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['decrypt'],
+  )
+  const plaintext = await crypto.subtle.decrypt(
+    {
+      name: 'AES-GCM',
+      iv: bytesFromBase64(envelope.cipher.iv),
+      additionalData: encoder.encode(encryptedFormat),
+    },
+    key,
+    bytesFromBase64(envelope.cipher.ciphertext),
+  )
+  return JSON.parse(new TextDecoder().decode(plaintext))
+}
+
+function savedAnswer() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(sessionKey) || '{}')
+    if (Number(saved.expiresAt) > Date.now() && typeof saved.answer === 'string') return saved.answer
+    sessionStorage.removeItem(sessionKey)
+  } catch {
+    sessionStorage.removeItem(sessionKey)
+  }
+  return ''
+}
+
+function rememberAnswer(answer) {
+  try {
+    sessionStorage.setItem(sessionKey, JSON.stringify({ answer, expiresAt: Date.now() + sessionLifetime }))
+  } catch {
+    // Storage can be disabled; access still works for the current page.
+  }
+}
+
+function showGate(envelope) {
+  document.title = 'Wisburg 每日简报 · 访问验证'
+  topMeta.textContent = 'ACCESS REQUIRED'
+  const panel = element('section', 'access-panel')
+  const bar = element('div', 'access-bar')
+  bar.append(element('span', '', 'WISBURG DAILY'), element('span', '', 'PRIVATE ACCESS'))
+  const form = element('form', 'access-form')
+  const question = element('label', 'access-question', envelope.access?.question || '请输入访问答案')
+  question.htmlFor = 'access-answer'
+  const input = element('input', 'access-input')
+  input.id = 'access-answer'
+  input.name = 'answer'
+  input.type = 'password'
+  input.autocomplete = 'current-password'
+  input.autocapitalize = 'none'
+  input.spellcheck = false
+  const feedback = element('div', 'access-feedback')
+  feedback.setAttribute('role', 'status')
+  const button = element('button', 'access-submit', 'ENTER')
+  button.type = 'submit'
+  form.append(question, input, feedback, button)
+  panel.append(bar, form)
+  app.replaceChildren(panel)
+  input.focus()
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault()
+    const answer = input.value.trim()
+    if (!answer) return
+    button.disabled = true
+    feedback.textContent = 'VERIFYING…'
+    feedback.className = 'access-feedback'
+    try {
+      const data = await decryptEnvelope(envelope, answer)
+      validate(data)
+      rememberAnswer(answer)
+      render(data)
+    } catch {
+      input.select()
+      feedback.textContent = 'ASK YOURSELF AGAIN'
+      feedback.className = 'access-feedback error'
+    } finally {
+      button.disabled = false
+    }
+  })
+}
+
+async function load() {
+  if (!globalThis.crypto?.subtle) throw new Error('当前浏览器不支持安全解密')
+  const response = await fetch(`./data/latest.json?v=${Date.now()}`, { cache: 'no-store' })
+  if (!response.ok) throw new Error(`最新简报尚未发布（${response.status}）`)
+  const envelope = await response.json()
+  validateEnvelope(envelope)
+  const answer = savedAnswer()
+  if (answer) {
+    try {
+      const data = await decryptEnvelope(envelope, answer)
+      validate(data)
+      render(data)
+      return
+    } catch {
+      sessionStorage.removeItem(sessionKey)
+    }
+  }
+  showGate(envelope)
+}
+
+load().catch(error => {
+  app.replaceChildren(element('div', 'state', error instanceof Error ? error.message : '简报加载失败'))
+})

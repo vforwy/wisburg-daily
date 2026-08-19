@@ -42,6 +42,18 @@ button, summary { font: inherit; }
 .page-title p { margin-top: 7px; color: var(--blue-soft); font-size: 12px; }
 .state { display: grid; min-height: 50vh; place-items: center; color: var(--blue-soft); font-size: 13px; }
 
+.access-panel { width: min(680px, 100%); margin: 14vh auto 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-surface); box-shadow: 0 18px 80px rgba(0, 0, 0, .42); }
+.access-bar { display: flex; justify-content: space-between; padding: 11px 14px; border-bottom: 1px solid var(--border); color: var(--blue); font: 10px var(--font-mono); letter-spacing: .7px; }
+.access-form { display: grid; grid-template-columns: minmax(0, 1fr) 92px; gap: 12px; padding: 24px; }
+.access-question { grid-column: 1 / -1; color: var(--white); font: 13px var(--font-mono); }
+.access-input { min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); outline: 0; background: var(--bg-base); color: var(--white); font: 14px var(--font-mono); }
+.access-input:focus { border-color: var(--accent); }
+.access-submit { height: 40px; border: 1px solid var(--accent); border-radius: var(--radius-sm); background: transparent; color: var(--blue-soft); cursor: pointer; font: 11px var(--font-mono); }
+.access-submit:hover { background: var(--bg-hover); color: var(--white); }
+.access-submit:disabled { cursor: wait; opacity: .6; }
+.access-feedback { grid-column: 1 / -1; min-height: 15px; color: var(--blue); font: 10px var(--font-mono); }
+.access-feedback.error { color: #ff7b72; }
+
 .section { margin-bottom: 12px; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-surface); }
 .section > h2 { display: flex; align-items: center; height: 44px; padding: 0 18px; border-bottom: 1px solid var(--border); background: var(--bg-raised); font-size: 15px; }
 .narrative, .event { padding: 22px 24px; border-bottom: 1px solid var(--border); }
@@ -103,5 +115,7 @@ button, summary { font: inherit; }
   .source summary { grid-template-columns: 106px 1fr 32px; }
   .institution { display: none; }
   .source-body { margin-right: 0; margin-left: 0; padding: 16px; }
+  .access-panel { margin-top: 8vh; }
+  .access-form { grid-template-columns: 1fr; padding: 20px 16px; }
+  .access-question, .access-feedback { grid-column: 1; }
 }
-
