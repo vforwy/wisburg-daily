@@ -1,3 +1,7 @@
 .DS_Store
 data/*.tmp
-
+.env
+__pycache__/
+*.pyc
+data/wisburg.sqlite
+data/wisburg.sqlite-*
